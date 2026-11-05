@@ -1,6 +1,6 @@
 /* Crono · modo offline: abre o app mesmo sem internet.
    Os dados não passam por aqui (vão direto para a planilha). */
-const VERSAO = 'crono-v1';
+const VERSAO = 'crono-v2';
 const ARQUIVOS = ['./', './index.html', './ponte.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 

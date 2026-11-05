@@ -149,6 +149,55 @@
     }
   };
 
+  /* ---------- ClaudIA: conversa via servidor, ferramentas rodam aqui ---------- */
+  var IA_MSG = {
+    sem_ia: 'A IA da ClaudIA ainda não foi ativada no servidor da planilha.',
+    ia_chave: 'A chave da Anthropic foi recusada. Confira em Propriedades do script.',
+    ia_credito: 'A conta da Anthropic está sem créditos.',
+    offline: 'Estou sem internet agora. Assim que a conexão voltar, posso ajudar.'
+  };
+  function sample(msgs, opts) {
+    opts = opts || {};
+    var ferramentas = opts.tools || [];
+    var porNome = {};
+    ferramentas.forEach(function (t) { porNome[t.name] = t; });
+    var tools = ferramentas.map(function (t) { return { name: t.name, description: t.description, input_schema: t.inputSchema || { type: 'object', properties: {} } }; });
+    var conv = msgs.map(function (m) { return { role: m.role, content: m.content }; });
+    var voltas = 0;
+    function cancelado() { return opts.signal && opts.signal.aborted; }
+    function rodada() {
+      if (cancelado()) return Promise.reject({ code: 'cancelled' });
+      voltas++;
+      return chamar({ action: 'ia', body: { max_tokens: 1024, messages: conv, tools: tools } }).then(function (j) {
+        var r = j.resp || {}, blocos = r.content || [];
+        var texto = blocos.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
+        var usos = blocos.filter(function (b) { return b.type === 'tool_use'; });
+        if (r.stop_reason === 'tool_use' && usos.length && voltas < 7) {
+          conv.push({ role: 'assistant', content: blocos });
+          return Promise.all(usos.map(function (u) {
+            var t = porNome[u.name];
+            return Promise.resolve().then(function () {
+              if (!t) throw new Error('Ferramenta desconhecida: ' + u.name);
+              return t.execute(u.input || {}, {});
+            }).then(function (out) {
+              return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out === undefined ? { ok: true } : out) };
+            }, function (e) {
+              return { type: 'tool_result', tool_use_id: u.id, is_error: true, content: String(e && e.message || e) };
+            });
+          })).then(function (res) { conv.push({ role: 'user', content: res }); return rodada(); });
+        }
+        texto = texto || 'Pronto, Sr. Eric.';
+        if (opts.onText) opts.onText({ text: texto });
+        return { text: texto };
+      }, function (e) {
+        var c = e && e.code;
+        throw { code: c === 'rate_limited' ? 'rate_limited' : (c || 'ia_erro'), text: IA_MSG[c] || (e && e.message) || '' };
+      });
+    }
+    return rodada();
+  }
+  sample.limits = function () { return Promise.resolve({ tools: true }); };
+
   var downloads = {
     save: function (o) {
       var url = URL.createObjectURL(o.data), a = document.createElement('a');
@@ -166,6 +215,7 @@
         if (nome === 'user') return Promise.resolve({ id: function () { return Promise.resolve('eric'); } });
         if (nome === 'mcp') return Promise.resolve(mcp);
         if (nome === 'downloads') return Promise.resolve(downloads);
+        if (nome === 'sample') return Promise.resolve(sample);
         return Promise.reject({ code: 'unavailable' });
       }
     };

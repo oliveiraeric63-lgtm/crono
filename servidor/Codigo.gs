@@ -94,6 +94,12 @@ function responder_(p) {
   if (!chave) return json_({ ok: false, code: 'sem_chave', msg: 'Rode configurar() no Apps Script.' });
   if (String(p.token || '') !== chave) return json_({ ok: false, code: 'unauthorized', msg: 'Chave inválida.' });
 
+  // a IA não usa a trava da planilha, para não atrasar as gravações
+  if (p.action === 'ia') {
+    try { return json_(ia_(p.body || {})); }
+    catch (err) { return json_({ ok: false, code: 'ia_erro', msg: String(err && err.message || err) }); }
+  }
+
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(25000);
@@ -206,6 +212,54 @@ function gravar_(abas, op) {
   else novaLinha_(d, [String(op.id), txt, agora, '']);
   novaLinha_(h, [agora, String(op.id), op.op, txt]);
   return { id: op.id, ok: true };
+}
+
+/* ---------- ClaudIA (IA via API da Anthropic) ----------
+   A chave da Anthropic fica só aqui, em Configurações do projeto ›
+   Propriedades do script › ANTHROPIC_KEY. Nunca vai para o app nem para o GitHub. */
+
+const IA_MODELO = 'claude-haiku-5-5';
+const IA_LIMITE_DIA = 150; // trava de custo: no máximo 150 chamadas por dia
+
+function ia_(body) {
+  const props = PropertiesService.getScriptProperties();
+  const key = props.getProperty('ANTHROPIC_KEY');
+  if (!key) return { ok: false, code: 'sem_ia', msg: 'A IA ainda não foi ativada no servidor (falta a chave da Anthropic).' };
+
+  const dia = 'IA_USO_' + Utilities.formatDate(new Date(), FUSO, 'yyyyMMdd');
+  const usados = Number(props.getProperty(dia) || 0);
+  if (usados >= IA_LIMITE_DIA) return { ok: false, code: 'rate_limited', msg: 'Limite diário da ClaudIA atingido.' };
+  props.setProperty(dia, String(usados + 1));
+
+  const pedido = {
+    model: IA_MODELO,
+    max_tokens: Math.min(Number(body.max_tokens) || 1024, 2048),
+    messages: body.messages || []
+  };
+  if (body.system) pedido.system = body.system;
+  if (Array.isArray(body.tools) && body.tools.length) pedido.tools = body.tools;
+
+  const r = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify(pedido),
+    muteHttpExceptions: true
+  });
+  const st = r.getResponseCode();
+  let j = null; try { j = JSON.parse(r.getContentText()); } catch (x) {}
+  if (st === 200 && j) return { ok: true, resp: j };
+  const msg = j && j.error && j.error.message ? j.error.message : ('HTTP ' + st);
+  if (st === 401 || st === 403) return { ok: false, code: 'ia_chave', msg: 'A chave da Anthropic foi recusada.' };
+  if (st === 429 || st === 529) return { ok: false, code: 'rate_limited', msg: msg };
+  if (/credit|balance/i.test(msg)) return { ok: false, code: 'ia_credito', msg: 'Sem créditos na conta da Anthropic.' };
+  return { ok: false, code: 'ia_erro', msg: msg };
+}
+
+/** Rode no editor uma vez depois de colar a chave: autoriza e testa a IA. */
+function testarIA() {
+  const r = ia_({ max_tokens: 50, messages: [{ role: 'user', content: 'Responda só: ClaudIA pronta.' }] });
+  Logger.log(r.ok ? 'OK: ' + r.resp.content.map(c => c.text || '').join('') : 'ERRO: ' + r.code + ' · ' + r.msg);
 }
 
 /* ---------- abas de relatório (Ponto, Clientes, Blocos, Pausas) ---------- */
