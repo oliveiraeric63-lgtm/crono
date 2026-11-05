@@ -997,11 +997,11 @@ const MESL=['janeiro','fevereiro','março','abril','maio','junho','julho','agost
 const LSK='cartao-ponto-v1';
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
 const NOCLI='Sem cliente';
-const DEFAULT_CLIS=['Nova Bairros','GastroClin','JL Negócios','Domus Marketing','Splash Moc','Arbix Imóveis','Atuar Seguros','Casa dos Óculos','Óticas Ouvidor','Use.V'];
+const DEFAULT_CLIS=[]; /* clientes vêm da planilha */
 const CLI_VER=2;
 const MOTIVOS=['Café','Pessoal','Ligação','Deslocamento','Descanso'];
 const PALETTE=['#6E8BFF','#2FB383','#E8813A','#D9579A','#8C6BE8','#1C9FB5','#D2453F','#7DAF2A','#C85D1E','#A94CC4','#3E9E6B','#5C7CFA'];
-const DEFAULT_SHEET='11oRMt7crEKC2gRyym1sFfAdEiTMqgkI8JHsQzlHlcBI';
+const DEFAULT_SHEET=''; /* id vem dos ajustes salvos na planilha */
 let cfgDirty=false,cfgBase=null,ctMigrated=false,bkDone=false;
 
 const S={days:{},cfg:{meta:480,alm:60,dias:[1,2,3,4,5],clientes:DEFAULT_CLIS.slice(),sheetId:DEFAULT_SHEET,sheetAuto:true,cia:true,fees:{},minHora:null},mode:'semana',ref:new Date(),store:'local',db:null,col:null,backups:[]};
